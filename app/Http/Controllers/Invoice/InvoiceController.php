@@ -101,6 +101,14 @@ class InvoiceController extends Controller
         //get customer name and product data from request
         $customer_name = $request->input('customer_name');
         $productData = $request->input('products');
+        //check if customer name and product data is null
+        if (is_null($customer_name) || is_null($productData)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nama customer dan produk tidak boleh kosong'
+            ], 422);
+        }
+
         //get product data from function getProduct
         $products = $this->getProduct($productData);
         try {
