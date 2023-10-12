@@ -21,6 +21,7 @@ class CreateOrderDetailsTable extends Migration
             $table->integer("product_qty")->default(0);
             $table->integer("product_price")->default(0);
             $table->integer("product_discount")->default(0);
+            $table->integer("total_before_discount")->default(0);
             $table->integer("total")->default(0);
             $table->timestamps();
         });

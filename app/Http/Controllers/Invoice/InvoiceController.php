@@ -10,42 +10,7 @@ use App\Models\Product;
 
 class InvoiceController extends Controller
 {
-
-    public function index()
-    {
-        try{
-            $orders = Order::with('details', 'details.product')->get();
-            return response()->json([
-                'success' => true,
-                'message' => 'List Semua Invoice',
-                'invoice' => $orders->map(function ($order) {
-                    return [
-                        'invoice' => $order->invoice,
-                        'customer_name' => $order->customer_name,
-                        'total' => $order->total,
-                        'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
-                        'updated_at' => $order->updated_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
-                        'detail' => $order->details->map(function ($detail) {
-                            return [
-                                'product_name' => $detail->product_name,
-                                'qty' => $detail->product_qty,
-                                'price' => $detail->product_price,
-                                'discount' => $detail->product_discount . '%',
-                                'total' => $detail->total,
-                            ];
-                        }),
-                    ];
-                })
-            ], 200);
-        }catch(\Exception $e){
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menampilkan invoice',
-                'data' => $e->getMessage()
-            ], 500);
-        }
-    }
-
+    
     private function generateInvoiceNumber()
     {
         //get time now 
@@ -58,17 +23,32 @@ class InvoiceController extends Controller
 
     private function getProduct($productData)
     {
-        $products = [];
+        $productQuantities = [];
+
         foreach ($productData as $data) {
             $product_id = $data['product_id'];
             $quantity = $data['quantity'];
+
+            if (array_key_exists($product_id, $productQuantities)) {
+                // If the product id already exists, add to the quantity
+                $productQuantities[$product_id] += $quantity;
+            } else {
+                // If the product id doesn't exist, create a new entry with quantity
+                $productQuantities[$product_id] = $quantity;
+            }
+        }
+        $products = [];
+        foreach ($productQuantities as $product_id => $quantity) {
             $product = Product::find($product_id);
+
             if (!$product) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Product dengan id ' . $product_id . ' tidak ditemukan'
                 ], 404);
             }
+
+            // Set the quantity to the aggregated quantity
             $product->quantity = $quantity;
             $products[] = $product;
         }
@@ -76,18 +56,70 @@ class InvoiceController extends Controller
         return $products;
     }
 
+    public function index()
+    {
+        try{
+            //get all invoice with details and product
+            $orders = Order::with('details', 'details.product')->get();
+            return response()->json([
+                //map data to new array
+                'success' => true,
+                'message' => 'List Semua Invoice',
+                'invoice' => $orders->map(function ($order) {
+                    //return data with new format
+                    return [
+                        'invoice' => $order->invoice,
+                        'customer_name' => $order->customer_name,
+                        'total' => $order->total,
+                        'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
+                        'updated_at' => $order->updated_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
+                        'detail' => $order->details->map(function ($detail) {
+                            return [
+                                'product_name' => $detail->product_name,
+                                'qty' => $detail->product_qty,
+                                'price' => $detail->product_price,
+                                'total_before_discount' => $detail->total_before_discount,
+                                'discount' => $detail->product_discount . '%',
+                                'total' => $detail->total,
+                            ];
+                        }),
+                    ];
+                })
+            ], 200);
+        }catch(\Exception $e){
+            //if error return error message
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menampilkan invoice',
+                'data' => $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function store(Request $request)
     {
+        //get customer name and product data from request
         $customer_name = $request->input('customer_name');
         $productData = $request->input('products');
+        //check if customer name and product data is null
+        if (is_null($customer_name) || is_null($productData)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nama customer dan produk tidak boleh kosong'
+            ], 422);
+        }
+
+        //get product data from function getProduct
         $products = $this->getProduct($productData);
         try {
+            //generate invoice number
             $invoiceNumber = $this->generateInvoiceNumber();
             $order = Order::create([
                 'invoice' => $invoiceNumber,
                 'customer_name' => $customer_name,
                 'total' => 0
             ]);
+            //looping product data
             $total = 0;
             foreach ($products as $product) {
                 $subtotal = $product->price * $product->quantity - ($product->price * $product->quantity * $product->discount / 100);
@@ -95,14 +127,17 @@ class InvoiceController extends Controller
                     'order_id' => $order->id,
                     'product_id' => $product->id,
                     'product_qty' => $product->quantity, 
+                    'total_before_discount' => $product->price * $product->quantity,
                     'product_name' => $product->name,
                     'product_price' => $product->price,
                     'product_discount' => $product->discount,
                     'total' => $subtotal
                 ]);
             }
+            //update total order
             $order->total = OrderDetails::where('order_id', $order->id)->sum('total');
             $order->save();
+            //return success message with invoice data
             return response()->json([
                 'success' => true,
                 'message' => 'Invoice berhasil dibuat',
@@ -111,10 +146,12 @@ class InvoiceController extends Controller
                     'customer_name' => $order->customer_name,
                     'total' => $order->total,
                     'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
+                    'updated_at' => $order->updated_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
                 ]
                 
             ], 200);
         } catch (\Exception $e) {
+            //if error return error message
             return response()->json([
                 'success' => false,
                 'message' => 'Invoice gagal dibuat',
@@ -124,10 +161,13 @@ class InvoiceController extends Controller
     }
 
     public function show(){
+        //get invoice number from query
         $invoice = request()->query('invoice');
         try{
+            //get invoice data with details and product
             $order = Order::where('invoice', $invoice)->with('details', 'details.product')->first();
             if($order){
+                //return invoice data with new format
                 return response()->json([
                     'success' => true,
                     'invoice' => $order->invoice,
@@ -141,18 +181,21 @@ class InvoiceController extends Controller
                             'qty' => $detail->product_qty,
                             'price' => $detail->product_price,
                             'discount' => $detail->product_discount . '%',
+                            'total_before_discount' => $detail->total_before_discount,
                             'total' => $detail->total,
                         ];
                     }),
                 
                 ], 200);
             }else{
+                //if invoice not found return error message
                 return response()->json([
                     'success' => false,
                     'message' => 'Invoice tidak ditemukan'
                 ], 404);
             }
         }catch(\Exception $e){
+            //if error return error message
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menampilkan invoice',
@@ -160,53 +203,76 @@ class InvoiceController extends Controller
             ], 500);
         }
     }
-
     public function update(Request $request){
+        // Get invoice number, customer name, and product data from the request
         $invoice = request()->query('invoice');
         $customer_name = $request->input('customer_name');
         $productData = $request->input('products');
         
-        try{
+        try {
+            // Find the invoice by invoice number
             $order = Order::where('invoice', $invoice)->first();
-            if($order){
-                $order->customer_name = $customer_name;
-                $order->total = 0;
-                $order->save();
-                $products = $this->getProduct($productData);
-                $total = 0;
-                foreach ($products as $product) {
-                    $subtotal = $product->price * $product->quantity - ($product->price * $product->quantity * $product->discount / 100);
-                    OrderDetails::updateOrCreate([
-                        'order_id' => $order->id,
-                     
-                    ],[
-                        'product_qty' => $product->quantity, 
-                        'product_name' => $product->name,
-                        'product_price' => $product->price,
-                        'product_discount' => $product->discount,
-                        'total' => $subtotal
-                    ]);
+            if ($order) {
+                // Check if the customer_name is changed
+                if (!is_null($customer_name) && $customer_name !== $order->customer_name) {
+                    $order->customer_name = $customer_name;
+                    $order->save();
+                } else {
+                    $customer_name = $order->customer_name; // Use the old customer_name
                 }
-                $order->total = OrderDetails::where('order_id', $order->id)->sum('total');
-                $order->save();
+                
+                // Initialize the total
+                $total = 0;
+                
+                // Check if there are products provided
+                if (!empty($productData)) {
+                    // Delete existing order details
+                    OrderDetails::where('order_id', $order->id)->delete();
+                    
+                    // Loop through the products
+                    $products = $this->getProduct($productData);
+                    foreach ($products as $product) {
+                        // Calculate the subtotal
+                        $subtotal = $product->price * $product->quantity - ($product->price * $product->quantity * $product->discount / 100);
+                    
+                        // Update or create order details for each product
+                        OrderDetails::create([
+                            'order_id' => $order->id,
+                            'product_qty' => $product->quantity,
+                            'product_name' => $product->name,
+                            'product_price' => $product->price,
+                            'product_discount' => $product->discount,
+                            'total_before_discount' => $product->price * $product->quantity,
+                            'total' => $subtotal
+                        ]);
+                    
+                        // Calculate the total order
+                        $total += $subtotal;
+                    }
+                    
+                    // Update the total order if products are changed
+                    $order->total = $total;
+                    $order->save();
+                }
+        
                 return response()->json([
                     'success' => true,
                     'message' => 'Invoice berhasil diupdate',
                     'data' => [
                         'invoice' => $order->invoice,
-                        'customer_name' => $order->customer_name,
+                        'customer_name' => $customer_name, // Use the potentially updated customer_name
                         'total' => $order->total,
                         'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
                     ]
-                    
                 ], 200);
-            }else{
+            } else {
+                // If invoice not found, return an error message
                 return response()->json([
                     'success' => false,
                     'message' => 'Invoice tidak ditemukan'
                 ], 404);
             }
-        }catch(\Exception $e){
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal mengupdate invoice',
@@ -214,25 +280,30 @@ class InvoiceController extends Controller
             ], 500);
         }
     }
-
+    
     public function destroy(){
+        //get invoice number from query
         $invoice = request()->query('invoice');
         try{
+            //find invoice by invoice number
             $order = Order::where('invoice', $invoice)->first();
             if($order){
                 OrderDetails::where('order_id', $order->id)->delete();
                 $order->delete();
+                //return success message if invoice deleted
                 return response()->json([
                     'success' => true,
                     'message' => 'Invoice berhasil dihapus',
                 ], 200);
             }else{
+                //if invoice not found return error message
                 return response()->json([
                     'success' => false,
                     'message' => 'Invoice tidak ditemukan'
                 ], 404);
             }
         }catch(\Exception $e){
+            //if error return error message
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menghapus invoice',
