@@ -138,6 +138,7 @@ class InvoiceController extends Controller
                     'customer_name' => $order->customer_name,
                     'total' => $order->total,
                     'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
+                    'updated_at' => $order->updated_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
                 ]
                 
             ], 200);
