@@ -10,47 +10,7 @@ use App\Models\Product;
 
 class InvoiceController extends Controller
 {
-
-    public function index()
-    {
-        try{
-            //get all invoice with details and product
-            $orders = Order::with('details', 'details.product')->get();
-            return response()->json([
-                //map data to new array
-                'success' => true,
-                'message' => 'List Semua Invoice',
-                'invoice' => $orders->map(function ($order) {
-                    //return data with new format
-                    return [
-                        'invoice' => $order->invoice,
-                        'customer_name' => $order->customer_name,
-                        'total' => $order->total,
-                        'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
-                        'updated_at' => $order->updated_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
-                        'detail' => $order->details->map(function ($detail) {
-                            return [
-                                'product_name' => $detail->product_name,
-                                'qty' => $detail->product_qty,
-                                'price' => $detail->product_price,
-                                'total_before_discount' => $detail->total_before_discount,
-                                'discount' => $detail->product_discount . '%',
-                                'total' => $detail->total,
-                            ];
-                        }),
-                    ];
-                })
-            ], 200);
-        }catch(\Exception $e){
-            //if error return error message
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menampilkan invoice',
-                'data' => $e->getMessage()
-            ], 500);
-        }
-    }
-
+    
     private function generateInvoiceNumber()
     {
         //get time now 
@@ -96,6 +56,45 @@ class InvoiceController extends Controller
         return $products;
     }
 
+    public function index()
+    {
+        try{
+            //get all invoice with details and product
+            $orders = Order::with('details', 'details.product')->get();
+            return response()->json([
+                //map data to new array
+                'success' => true,
+                'message' => 'List Semua Invoice',
+                'invoice' => $orders->map(function ($order) {
+                    //return data with new format
+                    return [
+                        'invoice' => $order->invoice,
+                        'customer_name' => $order->customer_name,
+                        'total' => $order->total,
+                        'created_at' => $order->created_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
+                        'updated_at' => $order->updated_at->tz('Asia/Jakarta')->format('d-m-Y H:i:s'),
+                        'detail' => $order->details->map(function ($detail) {
+                            return [
+                                'product_name' => $detail->product_name,
+                                'qty' => $detail->product_qty,
+                                'price' => $detail->product_price,
+                                'total_before_discount' => $detail->total_before_discount,
+                                'discount' => $detail->product_discount . '%',
+                                'total' => $detail->total,
+                            ];
+                        }),
+                    ];
+                })
+            ], 200);
+        }catch(\Exception $e){
+            //if error return error message
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal menampilkan invoice',
+                'data' => $e->getMessage()
+            ], 500);
+        }
+    }
 
     public function store(Request $request)
     {
