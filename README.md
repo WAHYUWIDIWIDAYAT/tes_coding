@@ -26,7 +26,7 @@ Next you need to make a copy of the `.env.example` file and rename it to `.env` 
 DB_CONNECTION=pgsql
 DB_HOST=127.0.0.1
 DB_PORT=5432
-DB_DATABASE=laravel
+DB_DATABASE=edwin
 DB_USERNAME=postgres
 DB_PASSWORD=12345
 
