@@ -15,6 +15,7 @@ class OrderDetails extends Model
         'product_qty',
         'product_price',
         'product_discount',
+        'total_before_discount',
         'total'
     ];
 
